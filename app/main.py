@@ -6,7 +6,9 @@ from app.utils.file_utils import detect_file_type
 from app.tools.biogpt_tool import biogpt_tool
 from app.tools.pubmedgpt_tool import pubmedgpt_tool
 from app.tools.summarizer_tool import summarizer_tool
+from dotenv import load_dotenv
 
+load_dotenv()
 st.set_page_config(page_title="Clinical Diagnosis Support", layout="centered")
 st.title("🩺 Clinical Diagnosis Support System")
 
