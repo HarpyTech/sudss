@@ -7,3 +7,6 @@ pdfplumber
 Pillow
 google-cloud-aiplatform
 python-dotenv
+black
+flake8
+pre-commit
