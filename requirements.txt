@@ -1,0 +1,9 @@
+streamlit
+fastapi
+uvicorn
+langchain
+pytesseract
+pdfplumber
+Pillow
+google-cloud-aiplatform
+python-dotenv
