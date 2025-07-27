@@ -2,9 +2,9 @@ name: Deploy to Cloud Run
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main, develop ]
 
 jobs:
   lint-and-format:
@@ -63,7 +63,7 @@ jobs:
       - name: Deploy to Cloud Run
         run: |
           SERVICE_NAME=sudss-app
-          if [[ "${{ github.ref_name }}" == "dev" ]]; then
+          if [[ "${{ github.ref_name }}" == "dev*" ]]; then
             SERVICE_NAME=sudss-dev
           fi
 
