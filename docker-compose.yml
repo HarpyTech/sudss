@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  sudss:
+    container_name: sudss
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+    restart: always

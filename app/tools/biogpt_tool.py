@@ -1,21 +1,20 @@
-import os
 from langchain.tools import Tool
-import requests
+from transformers import BioGptTokenizer, BioGptForCausalLM
 
-BIOGPT_API_URL = os.getenv("BIOGPT_API_URL")
-BIOGPT_API_KEY = os.getenv("BIOGPT_API_KEY")
+tokenizer = BioGptTokenizer.from_pretrained("microsoft/biogpt")
+model = BioGptForCausalLM.from_pretrained("microsoft/biogpt")
+
 
 def call_biogpt(text: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {BIOGPT_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    response = requests.post(BIOGPT_API_URL, json={"input": text}, headers=headers)
-    response.raise_for_status()
-    return response.json().get("output", "BioGPT response unavailable.")
+    encoded_input = tokenizer(text, return_tensors="pt")
+    output = model(**encoded_input)
+
+    return output
+
 
 biogpt_tool = Tool(
     name="BioGPT Tool",
     func=call_biogpt,
-    description="Use this tool for biological & medical language-based diagnosis using BioGPT."
+    description="""Use this tool for biological & medical
+     language-based diagnosis using BioGPT.""",
 )

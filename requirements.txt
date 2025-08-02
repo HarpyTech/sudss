@@ -1,9 +1,23 @@
+# UI / API
 streamlit
 fastapi
 uvicorn
+
+# LangChain core + Google GenAI integration
 langchain
-pytesseract
+langchain-google-genai
+
+# Google GenAI SDK
+google-generativeai
+
+# PDF/Text/Image processing (based on your previous mentions)
 pdfplumber
+pytesseract
 Pillow
-google-cloud-aiplatform
+
+# Dev Utils and Linters
 python-dotenv
+dotenv
+black
+flake8
+pre-commit
