@@ -41,6 +41,7 @@ def pubmedgpt_model(text: str) -> str:
 
     return output[0]["generated_text"]
 
+
 description = "Tool for retrieving clinical insights from PubMed-based GPT analysis."
 pubmedgpt_tool = Tool(
     name="PubMedGPT Tool",
