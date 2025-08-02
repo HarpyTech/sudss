@@ -15,5 +15,6 @@ def call_biogpt(text: str) -> str:
 biogpt_tool = Tool(
     name="BioGPT Tool",
     func=call_biogpt,
-    description="Use this tool for biological & medical language-based diagnosis using BioGPT.",
+    description="""Use this tool for biological & medical
+     language-based diagnosis using BioGPT.""",
 )

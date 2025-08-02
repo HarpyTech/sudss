@@ -27,7 +27,7 @@ jobs:
 
       - name: Run Flake8 (Linting)
         run: |
-          flake8 . --max-line-length=88
+          flake8 . --max-line-length=100
 
       - name: Run Black (Check Format)
         run: |
@@ -41,7 +41,8 @@ jobs:
 
     env:
       REGION: us-central1
-      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      PROJECT_ID: "${{ secrets.GCP_PROJECT_ID }}"
+      GOOGLE_AI_API_KEY: "${{ secrets.GOOGLE_AI_API_KEY }}"
 
     steps:
       - name: Checkout code

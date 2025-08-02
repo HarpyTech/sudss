@@ -25,5 +25,6 @@ def gemma_pubmed_model(text: str) -> str:
 pubmedgpt_tool = Tool(
     name="Gemma PubMed Tool",
     func=gemma_pubmed_model,
-    description="Tool using Google AI Studio's Gemma model for clinical keyword extraction.",
+    description="""Tool using Google AI Studio's Gemma
+      model for clinical keyword extraction.""",
 )

@@ -56,7 +56,7 @@ if uploaded_file or user_prompt.strip():
 
     with st.spinner("🤖 Generating diagnosis summary..."):
         result = agent.run(
-            f"""Analyze the following patient data and 
+            f"""Analyze the following patient data and
             generate diagnostic summary:\n{content}"""
         )
 
@@ -68,6 +68,6 @@ if uploaded_file or user_prompt.strip():
     )
 
 else:
-    info = """📥 Please upload a file or 
+    info = """📥 Please upload a file or
     enter a symptom description to continue."""
     st.info(info)

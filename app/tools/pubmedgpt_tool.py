@@ -32,7 +32,8 @@ def pubmedgpt_model(text: str) -> str:
     messages = [
         {
             "role": "system",
-            "content": "Extract medical keywords from this operative notes focus on anatomical, pathological, or procedural vocabulary.",
+            "content": """Extract medical keywords from this operative notes
+              focus on anatomical, pathological, or procedural vocabulary.""",
         },
         {"role": "user", "content": text},
     ]
@@ -40,9 +41,9 @@ def pubmedgpt_model(text: str) -> str:
 
     return output[0]["generated_text"]
 
-
+description = "Tool for retrieving clinical insights from PubMed-based GPT analysis."
 pubmedgpt_tool = Tool(
     name="PubMedGPT Tool",
     func=pubmedgpt_model,
-    description="Tool for retrieving clinical insights from PubMed-based GPT analysis.",
+    description=description,
 )
