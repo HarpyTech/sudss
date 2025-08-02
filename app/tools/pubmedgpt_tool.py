@@ -27,17 +27,22 @@ generation_args = {
     "do_sample": False,
 }
 
+
 def pubmedgpt_model(text: str) -> str:
     messages = [
-        {"role": "system", "content": "Extract medical keywords from this operative notes focus on anatomical, pathological, or procedural vocabulary."},
+        {
+            "role": "system",
+            "content": "Extract medical keywords from this operative notes focus on anatomical, pathological, or procedural vocabulary.",
+        },
         {"role": "user", "content": text},
     ]
     output = pipe(messages, **generation_args)
-    
-    return output[0]['generated_text']
+
+    return output[0]["generated_text"]
+
 
 pubmedgpt_tool = Tool(
     name="PubMedGPT Tool",
     func=pubmedgpt_model,
-    description="Tool for retrieving clinical insights from PubMed-based GPT analysis."
+    description="Tool for retrieving clinical insights from PubMed-based GPT analysis.",
 )

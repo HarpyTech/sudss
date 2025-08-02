@@ -14,12 +14,12 @@ st.title("🩺 Clinical Diagnosis Support System")
 # Input options: file OR text
 st.markdown("Upload a lab report **or** type symptoms directly.")
 uploaded_file = st.file_uploader(
-    "Upload patient data (Text, Image, or Lab Report PDF)", 
-    type=["txt", "pdf", "jpg", "png"]
+    "Upload patient data (Text, Image, or Lab Report PDF)",
+    type=["txt", "pdf", "jpg", "png"],
 )
 user_prompt = st.text_area(
-    "Or describe symptoms manually", 
-    placeholder="E.g., Patient has high fever, dry cough for 3 days..."
+    "Or describe symptoms manually",
+    placeholder="E.g., Patient has high fever, dry cough for 3 days...",
 )
 
 # Proceed if either input is given
@@ -40,7 +40,7 @@ if uploaded_file or user_prompt.strip():
     llm = ChatGoogleGenerativeAI(
         model=constants.GEMIN25_PRO,
         temperature=0.7,
-        google_api_key=variables.GOOGLE_AI_API_KEY
+        google_api_key=variables.GOOGLE_AI_API_KEY,
     )
 
     # LangChain Agent
@@ -48,7 +48,7 @@ if uploaded_file or user_prompt.strip():
         tools=tools,
         llm=llm,
         agent_type="chat-zero-shot-react-description",
-        verbose=True
+        verbose=True,
     )
 
     with st.spinner("🤖 Generating diagnosis summary..."):
@@ -59,7 +59,9 @@ if uploaded_file or user_prompt.strip():
     st.success("✅ Diagnostic Summary Ready")
     st.markdown("### 📝 Summary Report")
     st.text_area("Summary", value=result, height=300)
-    st.download_button("Download Summary", data=result, file_name="diagnosis_summary.txt")
+    st.download_button(
+        "Download Summary", data=result, file_name="diagnosis_summary.txt"
+    )
 
 else:
     st.info("📥 Please upload a file or enter a symptom description to continue.")

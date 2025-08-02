@@ -9,6 +9,7 @@ genai.configure(api_key=GOOGLE_AI_API_KEY)
 # Initialize the Gemma model
 model = genai.GenerativeModel(GEMMA3_4B)
 
+
 # Define the keyword extraction function
 def gemma_pubmed_model(text: str) -> str:
     prompt = (
@@ -19,9 +20,10 @@ def gemma_pubmed_model(text: str) -> str:
     response = model.generate_content(prompt)
     return response.text.strip()
 
+
 # Define LangChain Tool
 pubmedgpt_tool = Tool(
     name="Gemma PubMed Tool",
     func=gemma_pubmed_model,
-    description="Tool using Google AI Studio's Gemma model for clinical keyword extraction."
+    description="Tool using Google AI Studio's Gemma model for clinical keyword extraction.",
 )
