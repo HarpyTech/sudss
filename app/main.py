@@ -34,7 +34,10 @@ if uploaded_file or user_prompt.strip():
         content = user_prompt.strip()
 
     # LangChain tools
-    tools = [pubmed_a_gemma_tool.pubmedgpt_tool, summarizer_tool.summarizer_tool]
+    tools = [
+        pubmed_a_gemma_tool.pubmedgpt_tool,
+        summarizer_tool.summarizer_tool,
+    ]
 
     # LangChain LLM with Gemini
     llm = ChatGoogleGenerativeAI(
@@ -53,7 +56,8 @@ if uploaded_file or user_prompt.strip():
 
     with st.spinner("🤖 Generating diagnosis summary..."):
         result = agent.run(
-            f"Analyze the following patient data and generate diagnostic summary:\n{content}"
+            f"""Analyze the following patient data and 
+            generate diagnostic summary:\n{content}"""
         )
 
     st.success("✅ Diagnostic Summary Ready")
@@ -64,4 +68,6 @@ if uploaded_file or user_prompt.strip():
     )
 
 else:
-    st.info("📥 Please upload a file or enter a symptom description to continue.")
+    info = """📥 Please upload a file or 
+    enter a symptom description to continue."""
+    st.info(info)
