@@ -1,6 +1,6 @@
-from app.utils.image_parser import extract_text_from_image
-from app.utils.document_parser import extract_text_from_pdf
-from app.utils.text_cleaner import clean_text
+from utils.image_parser import extract_text_from_image
+from utils.document_parser import extract_text_from_pdf
+from utils.text_cleaner import clean_text
 
 def extract_content(raw_data, file_type):
     if file_type == "pdf":

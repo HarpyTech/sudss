@@ -1,17 +1,22 @@
-import os
 from langchain.tools import Tool
-from vertexai.language_models import TextGenerationModel
+import google.generativeai as genai
+from config import constants, variables
 
-GEMINI_PROJECT = os.getenv("GCP_PROJECT")
-GEMINI_LOCATION = os.getenv("GCP_REGION", "us-central1")
+# Configure API key
+if not variables.GOOGLE_AI_API_KEY:
+    raise ValueError("Missing GOOGLE_API_KEY environment variable")
 
+genai.configure(api_key=variables.GOOGLE_AI_API_KEY)
+
+# Define Gemini summarization function using Google GenAI SDK
 def gemini_summarize(text: str) -> str:
-    model = TextGenerationModel.from_pretrained("gemini-1.5-flash-preview")
-    response = model.predict(text, max_output_tokens=512)
-    return response.text
+    model = genai.GenerativeModel(constants.GEMINI25_FLASH)
+    response = model.generate_content(f"Summarize the following medical insights:\n{text}")
+    return response.text if hasattr(response, "text") else str(response)
 
+# Define LangChain-compatible Tool
 summarizer_tool = Tool(
     name="Summarizer Tool",
     func=gemini_summarize,
-    description="Use Gemini or Gemma to summarize BioGPT and PubMedGPT outputs."
+    description="Use Gemini Pro (via Google GenAI SDK) to summarize outputs from BioGPT and PubMedGPT."
 )
