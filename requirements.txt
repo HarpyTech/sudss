@@ -1,12 +1,29 @@
 streamlit
 fastapi
 uvicorn
-langchain
+langchain>=0.1.0
+langchain-community
+langchain-google-vertexai
+langchain-google-genai 
 pytesseract
 pdfplumber
 Pillow
 google-cloud-aiplatform
+google-generativeai
+vertexai
 python-dotenv
+
+# # Hugging Face Transformers + Tokenizers (BioGPT, PubMedGPT, etc.)
+# transformers>=4.40.0
+# sacremoses
+# sentencepiece  # In case other models like T5/BART are used
+# accelerate
+# # Torch (CPU version - standard install)
+# torch==2.6.0
+# torchvision==0.19.0
+# torchaudio==2.6.0
+
+dotenv
 black
 flake8
 pre-commit
