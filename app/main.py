@@ -4,7 +4,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agents.extractor_agent import extract_content
 from utils.file_utils import detect_file_type
-from tools import summarizer_tool, pubmed_a_gemma_tool
+from tools import summarizer_tool, pubmed_a_gemma_tool #
 from config import variables, constants
 
 # Streamlit setup
@@ -36,11 +36,12 @@ if uploaded_file or user_prompt.strip():
     # LangChain tools
     tools = [
         pubmed_a_gemma_tool.pubmedgpt_tool,
+
         summarizer_tool.summarizer_tool,
     ]
 
     # LangChain LLM with Gemini
-    llm = ChatGoogleGenerativeAI(
+    master_agent = ChatGoogleGenerativeAI( #
         model=constants.GEMIN25_PRO,
         temperature=0.7,
         google_api_key=variables.GOOGLE_AI_API_KEY,
@@ -48,8 +49,8 @@ if uploaded_file or user_prompt.strip():
 
     # LangChain Agent
     agent = initialize_agent(
-        tools=tools,
-        llm=llm,
+        tools=tools, ##
+        llm=master_agent,
         agent_type="chat-zero-shot-react-description",
         verbose=True,
     )
@@ -62,7 +63,7 @@ if uploaded_file or user_prompt.strip():
 
     st.success("✅ Diagnostic Summary Ready")
     st.markdown("### 📝 Summary Report")
-    st.text_area("Summary", value=result, height=300)
+    st.markdown("Summary", value=result, height=300)
     st.download_button(
         "Download Summary", data=result, file_name="diagnosis_summary.txt"
     )
@@ -71,3 +72,4 @@ else:
     info = """📥 Please upload a file or
     enter a symptom description to continue."""
     st.info(info)
+    

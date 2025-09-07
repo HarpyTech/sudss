@@ -22,7 +22,7 @@ def gemma_pubmed_model(text: str) -> str:
 
 
 # Define LangChain Tool
-pubmedgpt_tool = Tool(
+pubmedgpt_tool = Tool( # Agent 
     name="Gemma PubMed Tool",
     func=gemma_pubmed_model,
     description="""Tool using Google AI Studio's Gemma

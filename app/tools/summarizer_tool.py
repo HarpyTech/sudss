@@ -24,4 +24,5 @@ summarizer_tool = Tool(
     func=gemini_summarize,
     description="""Use Gemini Pro (via Google GenAI SDK) to
       summarize outputs from BioGPT and PubMedGPT.""",
+      instructions="Input should be text to summarize.",
 )
