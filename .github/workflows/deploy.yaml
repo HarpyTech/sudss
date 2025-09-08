@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint-and-format:
-    name: Lint & Format Check
+    name: 🧹 Lint & Format Check
     runs-on: ubuntu-latest
 
     steps:
@@ -26,18 +26,19 @@ jobs:
           pip install flake8 black
 
       - name: Run Flake8 (Linting)
-        run: |
-          flake8 . --max-line-length=100
+        run: flake8 . --max-line-length=100
 
       - name: Run Black (Check Format)
-        run: |
-          black . --check
+        run: black . --check
 
   deploy:
     name: 🚀 Deploy to Cloud Run
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     needs: lint-and-format
+
+    permissions:
+      contents: write   # needed to push tags
 
     env:
       REGION: us-central1
@@ -47,6 +48,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0   # fetch tags for versioning
 
       - name: Authenticate with GCP
         uses: google-github-actions/auth@v2
@@ -56,22 +59,46 @@ jobs:
       - name: Set up gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Bump version and create Git tag (Prod only)
+        if: github.ref_name == 'main'
+        id: version
+        uses: anothrNick/github-tag-action@1.67.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BUMP: patch
+          WITH_V: true   # produces v1.0.0 style tags
+
+      - name: Set Deployment Variables
+        id: vars
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            TAG_NAME=${{ steps.version.outputs.new_tag }}
+            echo "SERVICE_NAME=sudss-app" >> $GITHUB_ENV
+            echo "IMAGE_TAG=${TAG_NAME}" >> $GITHUB_ENV
+            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+          else
+            LAST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+            SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+            SNAPSHOT_TAG="${LAST_TAG}-snapshot-${SHORT_SHA}"
+            echo "SERVICE_NAME=sudss-dev" >> $GITHUB_ENV
+            echo "IMAGE_TAG=${SNAPSHOT_TAG}" >> $GITHUB_ENV
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+          fi
+
       - name: Build and Push Docker Image
         run: |
-          IMAGE_NAME=gcr.io/$PROJECT_ID/sudss-${{ github.ref_name }}
+          IMAGE_NAME=gcr.io/$PROJECT_ID/$SERVICE_NAME:$IMAGE_TAG
           gcloud builds submit --tag $IMAGE_NAME
+          # maintain rolling latest
+          gcloud container images add-tag $IMAGE_NAME \
+            gcr.io/$PROJECT_ID/$SERVICE_NAME:$ENVIRONMENT-latest --quiet
 
       - name: Deploy to Cloud Run
         run: |
-          SERVICE_NAME=sudss-app
-          if [[ "${{ github.ref_name }}" == "dev*" ]]; then
-            SERVICE_NAME=sudss-dev
-          fi
-
-          IMAGE_NAME=gcr.io/$PROJECT_ID/sudss-${{ github.ref_name }}
-
+          IMAGE_NAME=gcr.io/$PROJECT_ID/$SERVICE_NAME:$IMAGE_TAG
           gcloud run deploy $SERVICE_NAME \
             --image $IMAGE_NAME \
             --platform managed \
             --region $REGION \
-            --allow-unauthenticated
+            --allow-unauthenticated \
+            --set-env-vars ENV=$ENVIRONMENT,GOOGLE_AI_API_KEY=$GOOGLE_AI_API_KEY
