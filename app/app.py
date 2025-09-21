@@ -176,7 +176,7 @@ async def diagnose(
 
         # Run the agent synchronously (initialize_agent returns a sync agent in your original code)
         logger.info("Running agent...")
-        result = agent.run(refined_prompt)
+        result = agent.invoke(refined_prompt)
 
         return JSONResponse(status_code=200, content={"summary": result})
 
@@ -244,7 +244,7 @@ async def diagnose_download(
         )
 
         logger.info("Running agent to produce summary for PDF...")
-        result = agent.run(refined_prompt)
+        result = agent.invoke(refined_prompt)
 
         # Convert to PDF — assumes markdown_to_pdf returns bytes of PDF
         try:
