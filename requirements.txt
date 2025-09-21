@@ -14,6 +14,7 @@ google-generativeai
 pdfplumber
 pytesseract
 Pillow
+fpdf
 
 # Dev Utils and Linters
 python-dotenv
@@ -21,3 +22,13 @@ dotenv
 black
 flake8
 pre-commit
+
+faiss-cpu
+openai
+google-cloud-storage
+requests
+accelerate 
+bitsandbytes 
+transformers
+torch
+huggingface_hub

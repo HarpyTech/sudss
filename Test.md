@@ -41,7 +41,6 @@ echo "✅ Done!"
 
 ```
 
-
 #### EHR downloaded to Gcloud
 * https://synthea.mitre.org/downloads
     > https://academic.oup.com/jamia/article/25/3/230/4098271?login=false
