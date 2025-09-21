@@ -7,7 +7,8 @@ def generate_radiology_prompt(content: str, modality: str = "MRI") -> str:
     :return: Formatted prompt
     """
     prompt = f"""
-You are an expert radiologist. Generate a structured {modality} report for the patient data provided below.
+You are an expert radiologist. Generate a structured {modality} 
+report for the patient data provided below.
 The report must include the following sections:
 
 1. **Findings**: Describe all abnormal and normal observations in detail.

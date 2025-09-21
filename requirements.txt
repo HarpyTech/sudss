@@ -1,34 +1,60 @@
+# -------------------------------
 # UI / API
+# -------------------------------
 streamlit
 fastapi
-uvicorn
+uvicorn[standard]
+python-multipart        # needed for file uploads in FastAPI
+aiofiles               # async file handling (FastAPI uploads)
 
-# LangChain core + Google GenAI integration
+# -------------------------------
+# LangChain core + Google GenAI
+# -------------------------------
 langchain
 langchain-google-genai
-
-# Google GenAI SDK
 google-generativeai
 
-# PDF/Text/Image processing (based on your previous mentions)
+# -------------------------------
+# PDF / Text / Image Processing
+# -------------------------------
 pdfplumber
 pytesseract
 Pillow
 fpdf
+markdown               # convert markdown to HTML/text
+weasyprint             # optional: for markdown → PDF conversion
+opencv-python          # optional: image processing
+numpy
+pandas
 
-# Dev Utils and Linters
-python-dotenv
-dotenv
-black
-flake8
-pre-commit
-
+# -------------------------------
+# Vector Search / Embeddings
+# -------------------------------
 faiss-cpu
+sentence-transformers   # if you’re embedding text for retrieval
+
+# -------------------------------
+# Cloud / External APIs
+# -------------------------------
 openai
 google-cloud-storage
 requests
-accelerate 
-bitsandbytes 
-transformers
+httpx                  # async HTTP client (handy with FastAPI)
+
+# -------------------------------
+# ML / Transformers
+# -------------------------------
 torch
+torchvision            # if you process images with torch
+transformers
+accelerate
+bitsandbytes
 huggingface_hub
+
+# -------------------------------
+# Dev Utils / Linters
+# -------------------------------
+python-dotenv
+black
+flake8
+pre-commit
