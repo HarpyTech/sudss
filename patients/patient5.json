@@ -1,0 +1,49 @@
+{
+    "resourceType": "Bundle",
+    "id": "patient5",
+    "entry": [
+        {
+            "resource": {
+                "resourceType": "Patient",
+                "id": "p5",
+                "name": [
+                    {
+                        "text": "Sophia Martinez"
+                    }
+                ],
+                "gender": "female",
+                "birthDate": "1972-09-25"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Condition",
+                "id": "c5",
+                "code": {
+                    "text": "Breast Cancer"
+                },
+                "onsetDateTime": "2018-03-12"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Observation",
+                "id": "o5",
+                "code": {
+                    "text": "Tumor Marker (CA 15-3)"
+                },
+                "valueQuantity": {
+                    "value": 55,
+                    "unit": "U/mL"
+                }
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "dr5",
+                "conclusion": "Breast cancer recurrence suspected due to elevated tumor marker"
+            }
+        }
+    ]
+}

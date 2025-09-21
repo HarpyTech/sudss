@@ -1,0 +1,49 @@
+{
+    "resourceType": "Bundle",
+    "id": "patient1",
+    "entry": [
+        {
+            "resource": {
+                "resourceType": "Patient",
+                "id": "p1",
+                "name": [
+                    {
+                        "text": "John Doe"
+                    }
+                ],
+                "gender": "male",
+                "birthDate": "1975-03-22"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Condition",
+                "id": "c1",
+                "code": {
+                    "text": "Type 2 Diabetes Mellitus"
+                },
+                "onsetDateTime": "2015-05-01"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Observation",
+                "id": "o1",
+                "code": {
+                    "text": "HbA1c"
+                },
+                "valueQuantity": {
+                    "value": 8.2,
+                    "unit": "%"
+                }
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "dr1",
+                "conclusion": "Uncontrolled diabetes with high HbA1c level"
+            }
+        }
+    ]
+}

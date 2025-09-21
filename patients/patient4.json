@@ -1,0 +1,49 @@
+{
+    "resourceType": "Bundle",
+    "id": "patient4",
+    "entry": [
+        {
+            "resource": {
+                "resourceType": "Patient",
+                "id": "p4",
+                "name": [
+                    {
+                        "text": "Emily Davis"
+                    }
+                ],
+                "gender": "female",
+                "birthDate": "1990-12-12"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Condition",
+                "id": "c4",
+                "code": {
+                    "text": "Asthma"
+                },
+                "onsetDateTime": "2010-06-01"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Observation",
+                "id": "o4",
+                "code": {
+                    "text": "Peak Expiratory Flow"
+                },
+                "valueQuantity": {
+                    "value": 280,
+                    "unit": "L/min"
+                }
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "dr4",
+                "conclusion": "Mild persistent asthma with reduced peak flow"
+            }
+        }
+    ]
+}

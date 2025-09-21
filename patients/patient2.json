@@ -1,0 +1,49 @@
+{
+    "resourceType": "Bundle",
+    "id": "patient2",
+    "entry": [
+        {
+            "resource": {
+                "resourceType": "Patient",
+                "id": "p2",
+                "name": [
+                    {
+                        "text": "Jane Smith"
+                    }
+                ],
+                "gender": "female",
+                "birthDate": "1984-07-10"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Condition",
+                "id": "c2",
+                "code": {
+                    "text": "Hypertension"
+                },
+                "onsetDateTime": "2020-01-15"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Observation",
+                "id": "o2",
+                "code": {
+                    "text": "Systolic Blood Pressure"
+                },
+                "valueQuantity": {
+                    "value": 150,
+                    "unit": "mmHg"
+                }
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "dr2",
+                "conclusion": "Moderate hypertension requiring medication adjustment"
+            }
+        }
+    ]
+}

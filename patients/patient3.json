@@ -1,0 +1,49 @@
+{
+    "resourceType": "Bundle",
+    "id": "patient3",
+    "entry": [
+        {
+            "resource": {
+                "resourceType": "Patient",
+                "id": "p3",
+                "name": [
+                    {
+                        "text": "Robert Lee"
+                    }
+                ],
+                "gender": "male",
+                "birthDate": "1960-11-02"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Condition",
+                "id": "c3",
+                "code": {
+                    "text": "Chronic Obstructive Pulmonary Disease (COPD)"
+                },
+                "onsetDateTime": "2012-09-05"
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Observation",
+                "id": "o3",
+                "code": {
+                    "text": "FEV1"
+                },
+                "valueQuantity": {
+                    "value": 45,
+                    "unit": "%"
+                }
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "dr3",
+                "conclusion": "Severe COPD with reduced lung function"
+            }
+        }
+    ]
+}
