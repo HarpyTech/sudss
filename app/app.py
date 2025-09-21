@@ -21,7 +21,7 @@ from utils.pdf_utils import markdown_to_pdf
 from utils.prompt_utils import generate_radiology_prompt
 
 # Initialize logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format=constants.LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 # Run any required auth/login from your original app
