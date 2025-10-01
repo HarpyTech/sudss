@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 try:
     auth.hf_login()
     logger.info("HF login complete.")
+    MedicalImageModel()
+    logger.info("Loaded the Med Gemma Model")
 except Exception as e:
     # don't crash the app if login fails; surface the error on requests
     logger.warning("HF login failed during startup: %s", e)

@@ -1,119 +1,260 @@
+# app/agents/multimodel_agent.py
+# -*- coding: utf-8 -*-
 """
-agents/multimodel_agent.py
+MedGemma/Gemma-3 multimodal wrapper.
 
-Complete MedicalImageModel singleton for Gemma3 multimodal usage.
+Integrations:
+- Uses config.constants.MED_GEMMA_4B as the default model name.
+- Uses config.constants.LOG_FORMAT for logging format.
 
-Features:
-- Loads Gemma3ImageProcessor, AutoTokenizer, Gemma3ForConditionalGeneration.
-- Moves tensors to model device robustly.
-- Filters out unwanted processor metadata keys (e.g., 'num_crops').
-- Attempts to infer the correct number of image placeholder tokens by:
-    1) environment override IMG_TOKENS_OVERRIDE
-    2) model.config hints
-    3) running the encoder (best effort)
-    4) a capped patch-based heuristic
-- Adds/finds an image special token if needed and resizes model embeddings.
-- Appends the correct number of image tokens to input_ids (configurable behavior).
-- Detailed logging for diagnostics (uses LOG_FORMAT from config.constants).
+Key behavior:
+- Aligns image placeholder token with model.config.image_token_id (or '<image>' fallback).
+- Appends exactly the required count of image placeholder tokens (defaults to 256 if not explicit).
+- Preserves 'image_sizes' and other vision metadata passed through generate().
+- Removes stray '$' in prompts; when an image is present the prompt ends with ' : <image>'.
+
+Public API:
+    model = MedGemmaModel()  # defaults to MED_GEMMA_4B
+    text = model.run_inference(image_path="path/to/image.png", prompt="Describe the scan")
+
+Exports:
+    MedGemmaModel, MedicalImageModel (alias), load_medgemma
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 import torch
 from PIL import Image
-from transformers import (
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    Gemma3ForConditionalGeneration,
-    Gemma3ImageProcessor,
-)
+from transformers import AutoProcessor, AutoTokenizer, AutoModelForCausalLM
 
-from config.constants import MED_GEMMA_4B, LOG_FORMAT
-from config.variables import IMG_TOKENS_OVERRIDE, IMG_TOKENS_HEURISTIC_CAP, IMG_TOKENS_MAX_APPEND
+# --- Pull configuration from your constants module ---
+from config.constants import MED_GEMMA_4B, LOG_FORMAT  # noqa: E402
 
-# -------------------------
-# Logging configuration
-# -------------------------
-# Use the user's requested logging block
-logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
-__name__ = "MedicalImageModel"
+# ---------- Logging setup ----------
+# Prevent duplicate handlers in some reload contexts.
+_root_logger = logging.getLogger()
+if not _root_logger.handlers:
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+else:
+    # Ensure root logger uses the expected format at least for the first handler.
+    _root_logger.handlers[0].setFormatter(logging.Formatter(LOG_FORMAT))
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Safety cap: maximum number of image placeholder tokens we append.
+IMG_TOKENS_MAX_APPEND = 4096
 
 
-class MedicalImageModel:
+@dataclass
+class ModelInitConfig:
+    model_name: str
+    device: Optional[str] = None  # "cuda", "cpu", or None to auto-select
+    dtype: Optional[str] = None   # "float16", "bfloat16", etc., or None for default
+    trust_remote_code: bool = True
+
+
+class MedGemmaModel:
     """
-    Singleton wrapper for Gemma3 multimodal inference.
+    Thin convenience layer for Gemma-3-style VLMs (e.g., MedGemma variants).
     """
 
-    _instance: Optional["MedicalImageModel"] = None
-    _initialized: bool = False
+    def __init__(
+        self,
+        model_name: Optional[str] = None,
+        device: Optional[str] = None,
+        dtype: Optional[str] = None,
+        trust_remote_code: bool = True,
+    ):
+        # Default to configured model name if not provided
+        model_name = model_name or MED_GEMMA_4B
+        self.cfg = ModelInitConfig(
+            model_name=model_name,
+            device=device,
+            dtype=dtype,
+            trust_remote_code=trust_remote_code,
+        )
 
-    def __new__(cls, *args, **kwargs) -> "MedicalImageModel":
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+        # Resolve device and dtype
+        if self.cfg.device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = self.cfg.device
 
-    def __init__(self, use_quantization: bool = False):
-        if not self.__class__._initialized:
-            self.model_id = MED_GEMMA_4B
-            self.use_quantization = use_quantization
-            self._initialize_model()
-            self.__class__._initialized = True
-
-    def _initialize_model(self) -> None:
-        """
-        Load processor, tokenizer and model. This can be expensive.
-        """
-        logger.info("Loading MedGemma model %s ...", self.model_id)
-        # Load processor and tokenizer
-        self.processor = Gemma3ImageProcessor.from_pretrained(self.model_id)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-
-        model_kwargs: Dict[str, Any] = {"torch_dtype": torch.bfloat16, "device_map": "auto"}
-        if self.use_quantization:
-            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
-
-        # Load model
-        self.model = Gemma3ForConditionalGeneration.from_pretrained(self.model_id, **model_kwargs)
-
-        logger.info("MedGemma model loaded successfully (id=%s)", self.model_id)
-
-    # -------------------------
-    # Internal helpers
-    # -------------------------
-    def _move_tensors_to_device(
-        self, data_dict: Dict[str, Any], device: torch.device
-    ) -> Dict[str, Any]:
-        """
-        Move any torch.Tensor values in data_dict to the specified device.
-        Returns a new dict mapping keys to moved values (or original values if not tensors).
-        """
-        out: Dict[str, Any] = {}
-        for k, v in data_dict.items():
+        torch_dtype = None
+        if self.cfg.dtype:
             try:
-                if isinstance(v, torch.Tensor):
-                    out[k] = v.to(device)
-                elif isinstance(v, (list, tuple)) and len(v) and isinstance(v[0], torch.Tensor):
-                    out[k] = type(v)([t.to(device) for t in v])
-                else:
-                    # Some HF BatchEncodings support .to(device)
-                    if hasattr(v, "to") and not isinstance(v, (str, bytes)):
-                        try:
-                            out[k] = v.to(device)
-                        except Exception:
-                            out[k] = v
-                    else:
-                        out[k] = v
-            except Exception:
-                out[k] = v
+                torch_dtype = getattr(torch, self.cfg.dtype)
+            except AttributeError:
+                logger.warning("Unknown dtype '%s'; falling back to default.", self.cfg.dtype)
+
+        logger.info("Loading processor/tokenizer/model: %s", self.cfg.model_name)
+        self.processor = AutoProcessor.from_pretrained(
+            self.cfg.model_name,
+            trust_remote_code=self.cfg.trust_remote_code,
+        )
+        # Some Gemma-3 processors already contain a tokenizer; still get tokenizer explicitly
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.cfg.model_name,
+            trust_remote_code=self.cfg.trust_remote_code,
+            use_fast=True,
+        )
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.cfg.model_name,
+            torch_dtype=torch_dtype,
+            trust_remote_code=self.cfg.trust_remote_code,
+        ).to(self.device)
+
+        # Make sure special tokens are aligned (pad token, etc.) if needed
+        if self.tokenizer.pad_token is None:
+            # Prefer eos as pad to avoid size mismatches
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        logger.info("Model loaded on device=%s dtype=%s", self.device, str(torch_dtype))
+
+    # ------------------------------ Public API ------------------------------
+
+    def run_inference(
+        self,
+        image_path: Optional[str] = None,
+        prompt: str = "Summarize the MRI scan",
+        max_new_tokens: int = 512,
+    ) -> str:
+        """
+        Generates text from an optional image + text prompt.
+        Ensures the number and id of image placeholder tokens match the model's expectation.
+        """
+        logger.info("Running MedGemma inference (image provided=%s)", bool(image_path))
+
+        # If an image is present, append the textual marker '<image>' to the user prompt.
+        if image_path:
+            prompt = f"{prompt} : <image>"
+
+        # Build vision/text inputs
+        if image_path:
+            image = Image.open(image_path).convert("RGB")
+
+            image.verify()
+            # For Gemma-3 processors, this usually provides pixel_values (+ metadata)
+            processor_inputs = self.processor(images=image, return_tensors="pt")
+            processor_inputs = self._move_tensors_to_device(processor_inputs, self.model.device)
+
+            tok = self.tokenizer(prompt, return_tensors="pt")
+            tok = self._move_tensors_to_device(tok, self.model.device)
+
+            inputs: Dict[str, Any] = {**processor_inputs, **tok}
+        else:
+            # Text-only
+            tok = self.tokenizer(prompt, return_tensors="pt")
+            inputs = self._move_tensors_to_device(tok, self.model.device)
+
+        # If we have images, ensure correct placeholder tokens are appended
+        if "pixel_values" in inputs:
+            token_str, token_id, _ = self._find_or_add_image_token()
+            n_img_tokens = self._infer_image_token_count(inputs)
+            logger.info("Using %d image tokens (token='%s', id=%d)", n_img_tokens, token_str, token_id)
+
+            if n_img_tokens > IMG_TOKENS_MAX_APPEND:
+                logger.warning(
+                    "Inferred image token count %d exceeds cap %d; capping.",
+                    n_img_tokens, IMG_TOKENS_MAX_APPEND
+                )
+                n_img_tokens = IMG_TOKENS_MAX_APPEND
+
+            inputs["input_ids"] = self._append_image_placeholders(
+                inputs.get("input_ids"),
+                n_img_tokens,
+                token_id,
+                device=self.model.device
+            )
+
+        gen_inputs = self._filter_generate_inputs(inputs)
+        logger.debug("Final keys sent to generate(): %s", sorted(gen_inputs.keys()))
+
+        # Generate
+        with torch.no_grad():
+            generated_ids = self.model.generate(
+                **gen_inputs,
+                max_new_tokens=max_new_tokens,
+            )
+
+        # Decode
+        try:
+            text = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        except Exception:
+            text = [self.tokenizer.decode(g, skip_special_tokens=True) for g in generated_ids][0]
+
+        logger.info("MedGemma inference completed.")
+        return text
+
+    # --------------------------- Internal Utilities --------------------------
+
+    def _append_image_placeholders(
+        self,
+        input_ids: Optional[torch.Tensor],
+        count: int,
+        image_token_id: int,
+        device: torch.device | str,
+    ) -> torch.Tensor:
+        """
+        Append 'count' copies of image_token_id to input_ids (or create a fresh tensor if None).
+        """
+        img_tokens = torch.full(
+            (1, int(count)),
+            fill_value=int(image_token_id),
+            device=device,
+            dtype=torch.long,
+        )
+        if input_ids is None:
+            out = img_tokens
+        else:
+            out = torch.cat([input_ids, img_tokens], dim=1)
+
+        logger.info("Final input_ids shape after image placeholders: %s", tuple(out.shape))
         return out
+
+    def _move_tensors_to_device(self, batch: Dict[str, Any], device: torch.device | str) -> Dict[str, Any]:
+        moved = {}
+        for k, v in batch.items():
+            if isinstance(v, torch.Tensor):
+                moved[k] = v.to(device)
+            else:
+                moved[k] = v
+        return moved
+
+    def _infer_image_token_count(self, inputs: Dict[str, Any]) -> int:
+        """
+        Infer how many image placeholder tokens the model expects, based on processed vision
+        inputs and/or model config. Fall back conservatively to 256.
+        """
+        # Single-image assumption
+        num_images = 1
+        default_tokens = 256
+
+        # If processor provided an explicit 'image_grid_thw' (T,H,W -> tokens = T*H*W)
+        if "image_grid_thw" in inputs:
+            thw = inputs["image_grid_thw"]
+            if isinstance(thw, torch.Tensor) and thw.numel() >= 3:
+                t, h, w = [int(x) for x in thw[0].tolist()[:3]]
+                n = max(1, t) * max(1, h) * max(1, w)
+                return n * num_images
+
+        # Some processors expose 'image_sizes' which can be used to compute grids for patchified encoders.
+        # We keep default; preserving 'image_sizes' is handled in _filter_generate_inputs.
+        if "image_sizes" in inputs:
+            return default_tokens * num_images
+
+        # Fallback
+        return default_tokens * num_images
 
     def _filter_generate_inputs(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Keep only keys accepted by model.generate / forward to avoid transformer validate errors.
+        Keep only keys accepted by model.generate() -> model.forward(), but *preserve*
+        vision metadata keys commonly needed by VLMs.
         """
         allowed_keys = {
             "input_ids",
@@ -127,270 +268,96 @@ class MedicalImageModel:
             "position_ids",
             "token_type_ids",
             "labels",
+            # vision metadata
+            "image_sizes",
         }
         filtered = {k: v for k, v in inputs.items() if k in allowed_keys}
         removed = [k for k in inputs.keys() if k not in filtered]
         if removed:
-            logger.warning("Removed unexpected keys before model.generate(): %s", removed)
+            logger.debug("Removed unexpected keys before model.generate(): %s", removed)
         return filtered
 
-    def _find_or_add_image_token(
-        self, candidates: Optional[Tuple[str, ...]] = None
-    ) -> Tuple[str, int, bool]:
+    def _find_or_add_image_token(self, candidates: Optional[Tuple[str, ...]] = None) -> Tuple[str, int, bool]:
         """
-        Look for existing image special token(s) in tokenizer. If none found, add '<img>'.
+        Prefer model.config.image_token_id if present. Otherwise, use '<image>' and make sure
+        it exists in the tokenizer; if needed, add it and resize embeddings. Record the final id
+        back into model.config.image_token_id so the modeling code can find it.
         Returns (token_str, token_id, added_flag).
         """
-        if candidates is None:
-            candidates = ("<img>", "<image>", "<image_0>", "<image0>", "[IMAGE]")
-
-        # Search known candidates
-        unk_id = getattr(self.tokenizer, "unk_token_id", None)
-        for tok in candidates:
-            try:
-                tok_id = self.tokenizer.convert_tokens_to_ids(tok)
-            except Exception:
-                tok_id = None
-            if tok_id is not None and unk_id is not None:
-                if tok_id != unk_id:
-                    logger.info(
-                        "Found existing image token '%s' (id=%s) in tokenizer.", tok, tok_id
-                    )
-                    return tok, int(tok_id), False
-            else:
-                # If tokenizer has no unk_token_id, accept any non-zero id
-                if tok_id:
-                    logger.info(
-                        "Found existing image token '%s' (id=%s) in tokenizer.", tok, tok_id
-                    )
-                    return tok, int(tok_id), False
-
-        # Add default image token
-        image_token = "<img>"
-        logger.info(
-            "No existing image token found. Adding special token '%s' to tokenizer.", image_token
-        )
-        try:
-            self.tokenizer.add_special_tokens({"additional_special_tokens": [image_token]})
-            # resize model embeddings (best effort; some sharded setups may warn)
-            self.model.resize_token_embeddings(len(self.tokenizer))
-        except Exception as e:
-            logger.warning("Failed to add/resize tokenizer/model embeddings for image token: %s", e)
-
-        image_id = self.tokenizer.convert_tokens_to_ids(image_token)
-        logger.info("Added image token '%s' with id=%s", image_token, image_id)
-        return image_token, int(image_id), True
-
-    def _infer_image_token_count(self, inputs: Dict[str, Any]) -> int:
-        """
-        Infer number of image placeholder tokens the model expects.
-
-        Order of precedence:
-          1) Environment override IMG_TOKENS_OVERRIDE
-          2) Model config hints (num_image_tokens / vision_config.*)
-          3) Run encoder and inspect last_hidden_state sequence length (best effort)
-          4) Heuristic from pixel_values shape (capped)
-          5) Fallback to 1
-        """
-        # 1) Env override
-        override = IMG_TOKENS_OVERRIDE
-        if override:
-            try:
-                val = int(override)
-                logger.info("Using image token override from environment: %d", val)
-                return max(1, val)
-            except Exception:
-                logger.warning("Invalid IMG_TOKENS_OVERRIDE value: %s", override)
-
-        # 2) Model config hints
         cfg = getattr(self.model, "config", None)
+
+        # 0) If config already specifies an image token id, use it.
+        if cfg is not None and getattr(cfg, "image_token_id", None) is not None:
+            tok_id = int(cfg.image_token_id)
+            # token string may not be faithfully decodable; keep a friendly label
+            try:
+                tok_str = self.tokenizer.decode([tok_id], skip_special_tokens=False)
+                if not tok_str or tok_str == self.tokenizer.unk_token:
+                    tok_str = "<image>"
+            except Exception:
+                tok_str = "<image>"
+            logger.info("Using model.config.image_token_id=%d (token '%s')", tok_id, tok_str)
+            return tok_str, tok_id, False
+
+        # 1) Prefer '<image>'
+        image_token = "<image>"
+        tok_id = self.tokenizer.convert_tokens_to_ids(image_token)
+        need_add = tok_id is None or (
+            self.tokenizer.unk_token_id is not None and tok_id == self.tokenizer.unk_token_id
+        )
+
+        if need_add:
+            logger.info("Tokenizer lacks '<image>' token. Adding it as additional_special_tokens.")
+            try:
+                self.tokenizer.add_special_tokens({"additional_special_tokens": [image_token]})
+                self.model.resize_token_embeddings(len(self.tokenizer))
+                tok_id = self.tokenizer.convert_tokens_to_ids(image_token)
+            except Exception as e:
+                logger.warning("Adding '<image>' failed: %s", repr(e))
+                tok_id = None
+
+        # 2) If still unresolved, try common aliases
+        if tok_id is None or (
+            self.tokenizer.unk_token_id is not None and tok_id == self.tokenizer.unk_token_id
+        ):
+            for cand in ("<image_0>", "<image0>", "[IMAGE]"):
+                t = self.tokenizer.convert_tokens_to_ids(cand)
+                if t is not None and (self.tokenizer.unk_token_id is None or t != self.tokenizer.unk_token_id):
+                    image_token, tok_id = cand, int(t)
+                    logger.info("Falling back to existing image token '%s' (id=%d).", cand, tok_id)
+                    break
+
+        if tok_id is None or (
+            self.tokenizer.unk_token_id is not None and tok_id == self.tokenizer.unk_token_id
+        ):
+            raise ValueError("Could not establish a valid image token id for Gemma-3/MedGemma.")
+
+        # 3) Record on config so modeling code can find it
         try:
             if cfg is not None:
-                if getattr(cfg, "num_image_tokens", None):
-                    val = int(cfg.num_image_tokens)
-                    logger.info("Using config.num_image_tokens = %d", val)
-                    return max(1, val)
-                vision_cfg = getattr(cfg, "vision_config", None)
-                if vision_cfg is not None:
-                    if getattr(vision_cfg, "num_image_tokens", None):
-                        val = int(vision_cfg.num_image_tokens)
-                        logger.info("Using vision_config.num_image_tokens = %d", val)
-                        return max(1, val)
-                    if getattr(vision_cfg, "image_token_length", None):
-                        val = int(vision_cfg.image_token_length)
-                        logger.info("Using vision_config.image_token_length = %d", val)
-                        return max(1, val)
-        except Exception:
-            logger.debug(
-                "Model config inspection failed when inferring image token count", exc_info=True
-            )
-
-        # 3) Try running encoder to get hidden state length
-        try:
-            if "pixel_values" in inputs:
-                pv = inputs["pixel_values"].to(self.model.device)
-                encoder = None
-                # get_encoder may be callable or attribute
-                try:
-                    enc_getter = getattr(self.model, "get_encoder", None)
-                    if callable(enc_getter):
-                        encoder = self.model.get_encoder()
-                    elif hasattr(self.model, "encoder"):
-                        encoder = self.model.encoder
-                except Exception:
-                    encoder = None
-
-                if encoder is not None:
-                    logger.info("Attempting to run encoder to infer image embedding length...")
-                    with torch.no_grad():
-                        enc_out = encoder(pv, return_dict=True)
-                    last = getattr(enc_out, "last_hidden_state", None)
-                    if last is not None:
-                        token_count = int(last.shape[1])
-                        logger.info(
-                            "Encoder produced last_hidden_state sequence length: %d", token_count
-                        )
-                        # this is likely the correct mapping count
-                        return max(1, token_count)
+                cfg.image_token_id = int(tok_id)
+                logger.info("Set model.config.image_token_id=%d", int(tok_id))
         except Exception as e:
-            logger.debug("Encoder-run inference failed: %s", e, exc_info=True)
+            logger.debug("Failed to set config.image_token_id: %s", repr(e))
 
-        # 4) Heuristic from pixel_values shape (cap to avoid huge appends)
-        try:
-            pv = inputs.get("pixel_values", None)
-            if pv is not None:
-                shape = tuple(pv.shape)
-                if len(shape) == 4:
-                    _, c, h, w = shape
-                    # Estimated patch count using patch size ~16
-                    patches_est = max(1, (h // 16) * (w // 16))
-                    CAP = int(IMG_TOKENS_HEURISTIC_CAP)
-                    val = min(patches_est, CAP)
-                    logger.info(
-                        """Heuristic estimated %d image tokens from pixel_values
-                        shape %s (capped to %d)""",
-                        patches_est,
-                        shape,
-                        val,
-                    )
-                    return int(val)
-                elif len(shape) == 3:
-                    seq_len = int(shape[1])
-                    logger.info(
-                        "Using pixel_values sequence length %d as image token count", seq_len
-                    )
-                    return max(1, seq_len)
-        except Exception:
-            logger.debug("Pixel-values heuristic failed", exc_info=True)
+        return image_token, int(tok_id), True
 
-        # 5) Final fallback
-        logger.warning("Unable to infer image token count; defaulting to 1")
-        return 1
 
-    # -------------------------
-    # Public API
-    # -------------------------
-    def run_inference(
-        self, image_path: Optional[str] = None, prompt: str = "Summarize the MRI scan"
-    ) -> str:
-        """
-        Run multimodal generation. Returns generated text.
-        If image_path is provided, ensures an appropriate number of image placeholder tokens
-        are present in input_ids to align with image embeddings.
-        """
-        logger.info("Running MedGemma inference (image_path provided=%s)", bool(image_path))
+# Backwards-compat alias (your app may import this name)
+MedicalImageModel = MedGemmaModel
 
-        # Prepare inputs
-        if image_path:
-            image = Image.open(image_path).convert("RGB")
-            # processor may return meta keys like 'num_crops'
-            # — keep them for inspection but will filter later
-            inputs = self.processor(images=image, return_tensors="pt")
-            inputs = self._move_tensors_to_device(inputs, self.model.device)
 
-            tokenized = self.tokenizer(prompt, return_tensors="pt")
-            tokenized = self._move_tensors_to_device(tokenized, self.model.device)
+# Optional: simple factory, if your app prefers constructing via a function.
+def load_medgemma(
+    model_name: Optional[str] = None,
+    device: Optional[str] = None,
+    dtype: Optional[str] = None
+) -> MedGemmaModel:
+    """
+    Convenience factory to create a MedGemmaModel.
+    Defaults to MED_GEMMA_4B from config.constants if model_name is None.
+    """
+    return MedGemmaModel(model_name=model_name or MED_GEMMA_4B, device=device, dtype=dtype)
 
-            # Keep pixel_values from processor; add text input_ids from tokenizer
-            inputs["input_ids"] = tokenized.get("input_ids")
-        else:
-            tokenized = self.tokenizer(prompt, return_tensors="pt")
-            inputs = self._move_tensors_to_device(tokenized, self.model.device)
 
-        # If image present, ensure text has image placeholder tokens aligned to image embeddings
-        if "pixel_values" in inputs:
-            image_token_str, image_token_id, _added = self._find_or_add_image_token()
-            img_token_count = self._infer_image_token_count(inputs)
-            logger.info(
-                "Decided to use %d image placeholder tokens (token='%s' id=%s)",
-                img_token_count,
-                image_token_str,
-                image_token_id,
-            )
-
-            # Safety cap to avoid insane sequence growth
-            MAX_APPEND = int(IMG_TOKENS_MAX_APPEND)
-            if img_token_count > MAX_APPEND:
-                logger.warning(
-                    "img_token_count %d exceeds MAX_APPEND %d; capping", img_token_count, MAX_APPEND
-                )
-                img_token_count = MAX_APPEND
-
-            input_ids = inputs.get("input_ids")
-            if input_ids is None:
-                inputs["input_ids"] = torch.tensor(
-                    [[image_token_id] * img_token_count], device=self.model.device
-                )
-                logger.info("Created input_ids consisting of %d image tokens.", img_token_count)
-            else:
-                try:
-                    if isinstance(input_ids, torch.Tensor):
-                        img_tokens = torch.tensor(
-                            [[image_token_id] * img_token_count], device=self.model.device
-                        )
-                        # Append image tokens by default. If you need
-                        # insertion at a marker, modify here.
-                        inputs["input_ids"] = torch.cat([input_ids, img_tokens], dim=1)
-                        logger.info(
-                            "Appended %d image tokens to input_ids (new shape=%s).",
-                            img_token_count,
-                            inputs["input_ids"].shape,
-                        )
-                    else:
-                        inputs["input_ids"] = torch.tensor(
-                            [[image_token_id] * img_token_count], device=self.model.device
-                        )
-                        logger.info(
-                            "Replaced non-tensor input_ids with %d image tokens.", img_token_count
-                        )
-                except Exception as e:
-                    logger.warning(
-                        """Failed to append image tokens (%s). Overwriting
-                        input_ids with image tokens.""",
-                        e,
-                    )
-                    inputs["input_ids"] = torch.tensor(
-                        [[image_token_id] * img_token_count], device=self.model.device
-                    )
-
-        # Filter out unsupported keys to avoid generate() ValueError
-        gen_inputs = self._filter_generate_inputs(inputs)
-
-        # Generate
-        try:
-            with torch.no_grad():
-                generated_ids = self.model.generate(**gen_inputs, max_new_tokens=512)
-        except Exception as e:
-            logger.error("Model.generate failed: %s", e, exc_info=True)
-            raise
-
-        # Decode
-        try:
-            generated_text = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        except Exception:
-            generated_text = [
-                self.tokenizer.decode(g, skip_special_tokens=True) for g in generated_ids
-            ][0]
-
-        logger.info("MedGemma inference completed.")
-        return generated_text
+__all__ = ["MedGemmaModel", "MedicalImageModel", "load_medgemma"]
