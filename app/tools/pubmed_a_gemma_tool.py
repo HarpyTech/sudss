@@ -1,7 +1,7 @@
 from langchain.tools import Tool
 import google.generativeai as genai
-from config.variables import GOOGLE_AI_API_KEY
-from config.constants import GEMMA3_4B
+from app.config.variables import GOOGLE_AI_API_KEY
+from app.config.constants import GEMMA3_4B
 
 # Configure Google GenAI SDK
 genai.configure(api_key=GOOGLE_AI_API_KEY)

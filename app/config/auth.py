@@ -1,6 +1,6 @@
 from huggingface_hub import login
 
-from config.variables import HF_TOKEN
+from app.config.variables import HF_TOKEN
 
 
 def hf_login():

@@ -13,12 +13,12 @@ from pydantic import BaseModel
 from langchain.agents import initialize_agent, Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.multimodel_agent import MedicalImageModel
-from config import variables, constants, auth
-from tools import summarizer_tool, pubmed_a_gemma_tool
-from utils.modality_utils import detect_modality_with_llm
-from utils.pdf_utils import markdown_to_pdf
-from utils.prompt_utils import generate_radiology_prompt
+from app.agents.multimodel_agent import MedicalImageModel
+from app.config import variables, constants, auth # app.
+from app.tools import summarizer_tool, pubmed_a_gemma_tool
+from app.utils.modality_utils import detect_modality_with_llm
+from app.utils.pdf_utils import markdown_to_pdf
+from app.utils.prompt_utils import generate_radiology_prompt
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO, format=constants.LOG_FORMAT)
@@ -53,15 +53,20 @@ class DiagnoseRequest(BaseModel):
 
 def save_uploadfile_tmp(upload_file: UploadFile) -> str:
     """
-    Save UploadFile to a temporary file and return the path.
-    Caller should remove the file when done (or allow temp dir cleanup).
+    Save UploadFile to the present working directory and return the saved path.
+    Caller should remove the file manually if needed.
     """
-    suffix = os.path.splitext(upload_file.filename)[1] or ""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp_path = tmp.name
+    # Get the present working directory (where the app is running)
+    pwd = os.getcwd()
+
+    # Construct the full path to save the file
+    save_path = os.path.join(pwd, upload_file.filename)
+    # Save the uploaded file contents to the PWD
+    with open(save_path, "wb") as f:
         content = upload_file.file.read()
-        tmp.write(content)
-    return tmp_path
+        f.write(content)
+
+    return save_path
 
 
 def build_agent_and_tools(image_path: Optional[str] = None):

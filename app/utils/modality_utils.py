@@ -1,4 +1,4 @@
-from agents.multimodel_agent import MedicalImageModel
+from app.agents.multimodel_agent import MedicalImageModel
 
 
 def detect_modality_with_llm(content: str, image_path: str = None) -> str:

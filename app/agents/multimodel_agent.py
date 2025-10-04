@@ -32,7 +32,7 @@ from PIL import Image
 from transformers import AutoProcessor, AutoTokenizer, AutoModelForCausalLM
 
 # --- Pull configuration from your constants module ---
-from config.constants import MED_GEMMA_4B, LOG_FORMAT  # noqa: E402
+from app.config.constants import MED_GEMMA_4B, LOG_FORMAT  # noqa: E402
 
 # ---------- Logging setup ----------
 # Prevent duplicate handlers in some reload contexts.
@@ -136,24 +136,41 @@ class MedGemmaModel:
 
         # Build vision/text inputs
         if image_path:
+            try:
+                with Image.open(image_path) as im:
+                    im.verify()  # raises if corrupted
+            except Exception as e:
+                raise ValueError(f"Bad image file: {image_path} — {e}")
             image = Image.open(image_path).convert("RGB")
 
-            image.verify()
-            # For Gemma-3 processors, this usually provides pixel_values (+ metadata)
-            processor_inputs = self.processor(images=image, return_tensors="pt")
-            processor_inputs = self._move_tensors_to_device(processor_inputs, self.model.device)
+            # right before calling the processor
+            # number of images you pass (1 in your stacktrace, but make it robust)
+            num_images = 1 if not isinstance(image, (list, tuple)) else len(image)
 
-            tok = self.tokenizer(prompt, return_tensors="pt")
-            tok = self._move_tensors_to_device(tok, self.model.device)
+            # get the exact image token that this tokenizer expects, with a safe fallback
+            img_tok = getattr(getattr(self.processor, "tokenizer", None), "image_token", "<image>")
 
-            inputs: Dict[str, Any] = {**processor_inputs, **tok}
+            # build a dummy prompt containing *num_images* image tokens
+            dummy_text_for_processor = " ".join([img_tok] * num_images)
+
+            # now call the processor ONLY to get vision tensors
+            processor_inputs = self.processor(
+                images=image,
+                text=dummy_text_for_processor,   # important: satisfies the internal check
+                return_tensors="pt"
+            )
+
+            inputs = self._move_tensors_to_device(processor_inputs, self.model.device)
+
         else:
             # Text-only
             tok = self.tokenizer(prompt, return_tensors="pt")
             inputs = self._move_tensors_to_device(tok, self.model.device)
 
         # If we have images, ensure correct placeholder tokens are appended
-        if "pixel_values" in inputs:
+        used_unified = bool(image_path)  # we used processor(images, text=prompt)
+
+        if "pixel_values" in inputs and not used_unified:
             token_str, token_id, _ = self._find_or_add_image_token()
             n_img_tokens = self._infer_image_token_count(inputs)
             logger.info("Using %d image tokens (token='%s', id=%d)", n_img_tokens, token_str, token_id)

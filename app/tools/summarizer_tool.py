@@ -1,6 +1,6 @@
 from langchain.tools import Tool
 import google.generativeai as genai
-from config import constants, variables
+from app.config import constants, variables
 
 # Configure API key
 if not variables.GOOGLE_AI_API_KEY:
